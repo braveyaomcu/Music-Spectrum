@@ -1,0 +1,292 @@
+C51 COMPILER V9.00   MISC                                                                  04/02/2022 17:33:40 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE MISC
+OBJECT MODULE PLACED IN misc.OBJ
+COMPILER INVOKED BY: D:\Keil\C51\BIN\C51.EXE misc.c LARGE BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include "misc.h"
+   2          #include "system.h"
+   3          #include "display.h"
+   4          #include <stdio.h>
+   5          #include <string.h>
+   6          
+   7          xdata Byte systemMode=0;
+   8          xdata Byte codeIndex=0;
+   9          
+  10          static xdata Byte led_status=0;
+  11          
+  12          //#define EVENT_CB(ev)   if(handle->cb[ev])handle->cb[ev]((Button_t *)handle)
+  13          
+  14          //static xdata Button_t   button_handle[BUTTON_MAX];
+  15          
+  16          void led_run(void)
+  17          {
+  18   1          
+  19   1          switch(led_status)
+  20   1          {
+  21   2              case 0:
+  22   2                  LED_ON;
+  23   2                  led_status=1;
+  24   2                  break;
+  25   2              case 1:
+  26   2                  LED_OFF;
+  27   2                  led_status=0;
+  28   2                  break;
+  29   2              default:
+  30   2                  LED_ON;
+  31   2                  led_status=1;
+  32   2                  break;
+  33   2          }
+  34   1          
+  35   1          
+  36   1      }
+  37          
+  38          static Byte key_last=1;
+  39          static Byte debounce_cnt=0;
+  40          static Byte key_tick=0;
+  41          static Byte key_state=0;
+  42          
+  43          void key_run(void)
+  44          {
+  45   1          if(key_state>0)
+  46   1              key_tick++;
+  47   1          
+  48   1          if(key_last!=KEY){
+  49   2              if((debounce_cnt++) >= DEBOUNCE_TICKS)
+  50   2              {
+  51   3                  key_last=KEY;
+  52   3                  debounce_cnt=0;
+  53   3              }
+  54   2          }
+  55   1          else
+C51 COMPILER V9.00   MISC                                                                  04/02/2022 17:33:40 PAGE 2   
+
+  56   1              debounce_cnt=0;
+  57   1              
+  58   1          switch(key_state)
+  59   1          {
+  60   2              case 0:
+  61   2                  if(key_last == 0)
+  62   2                  {
+  63   3                      //TO DO: KEY_DOWN
+  64   3                      printf("key down\r\n");
+  65   3                      key_tick=0;
+  66   3                      key_state=1;
+  67   3                  }
+  68   2                  break;
+  69   2              case 1:
+  70   2                  if(key_last != 0)
+  71   2                  {
+  72   3                      //TO DO: KEY_RELEASE
+  73   3                      printf("key release\r\n");
+  74   3                      codeIndex++;
+  75   3                      key_tick=0;
+  76   3                      key_state=0;
+  77   3                  }
+  78   2                  else if(key_tick>LONG_TICKS)
+  79   2                  {
+  80   3                      key_state=3;
+  81   3                  }
+  82   2                  break;
+  83   2              case 3:
+  84   2                  if(key_last != 0)
+  85   2                  {
+  86   3                      //TO DO: KEY_DOWN
+  87   3                      printf("key long press\r\n");
+  88   3                      if(systemMode==0)
+  89   3                          systemMode=1;
+  90   3                      else
+  91   3                          systemMode=0;
+  92   3                      codeIndex=0;
+  93   3                      key_tick=0;
+  94   3                      key_state=0;
+  95   3                  }
+  96   2                  break;    
+  97   2              
+  98   2          }
+  99   1      }
+ 100          
+ 101          
+ 102          
+ 103          #if 0
+              void button_init(void)
+              {
+                  Byte i=0;
+                  for(i=0;i<BUTTON_MAX;i++)
+                  {
+                      memset(&button_handle[i], 0, sizeof(Button_t));
+                      
+                  }
+              }
+              
+              void button_add(Byte (*pin_level)(), 
+                              Byte active_level,
+                              PressEvent event, 
+                              BtnCallback cb)
+C51 COMPILER V9.00   MISC                                                                  04/02/2022 17:33:40 PAGE 3   
+
+              {
+                  Byte i=0;
+                  for(i=0;i<BUTTON_MAX;i++)
+                  {
+                      
+                      if(button_handle[i].hal_button_Level==0)
+                      {
+                          button_handle[i].event = (Byte)NONE_PRESS;
+                          button_handle[i].hal_button_Level = pin_level;
+                          button_handle[i].button_level = button_handle[i].hal_button_Level();
+                          button_handle[i].active_level = active_level;
+                          button_handle[i].cb[event] = cb;
+                          break;
+                      }
+                  }
+                  
+                  if(i>=BUTTON_MAX)
+                  {
+                      
+                  }
+              }
+              
+              void button_handler(Button_t    *handle)
+              {
+                  
+                      Byte     read_gpio_level = handle->hal_button_Level();
+              
+                      //ticks counter working..
+                      if((handle->state) > 0) handle->ticks++;
+              
+                      /*------------button debounce handle---------------*/
+                      if(read_gpio_level != handle->button_level) { //not equal to prev one
+                              //continue read 3 times same new level change
+                              if(++(handle->debounce_cnt) >= DEBOUNCE_TICKS) {
+                                      handle->button_level = read_gpio_level;
+                                      handle->debounce_cnt = 0;
+                              }
+                      } else { //leved not change ,counter reset.
+                              handle->debounce_cnt = 0;
+                      }
+              
+                      /*-----------------State machine-------------------*/
+                      switch (handle->state) {
+                      case 0:
+                              if(handle->button_level == handle->active_level) {      //start press down
+                                      handle->event = (Byte)PRESS_DOWN;
+                                      EVENT_CB(PRESS_DOWN);
+                                      handle->ticks = 0;
+                                      handle->repeat = 1;
+                                      handle->state = 1;
+                              } else {
+                                      handle->event = (Byte)NONE_PRESS;
+                              }
+                              break;
+              
+                      case 1:
+                              if(handle->button_level != handle->active_level) { //released press up
+                                      handle->event = (Byte)PRESS_UP;
+                                      EVENT_CB(PRESS_UP);
+                                      handle->ticks = 0;
+                                      handle->state = 2;
+              
+C51 COMPILER V9.00   MISC                                                                  04/02/2022 17:33:40 PAGE 4   
+
+                              } else if(handle->ticks > LONG_TICKS) {
+                                      handle->event = (Byte)LONG_PRESS_START;
+                                      EVENT_CB(LONG_PRESS_START);
+                                      handle->state = 5;
+                              }
+                              break;
+              
+                      case 2:
+                              if(handle->button_level == handle->active_level) { //press down again
+                                      handle->event = (Byte)PRESS_DOWN;
+                                      EVENT_CB(PRESS_DOWN);
+                                      handle->repeat++;
+                                      EVENT_CB(PRESS_REPEAT); // repeat hit
+                                      handle->ticks = 0;
+                                      handle->state = 3;
+                              } else if(handle->ticks > SHORT_TICKS) { //released timeout
+                                      if(handle->repeat == 1) {
+                                              handle->event = (Byte)SINGLE_CLICK;
+                                              EVENT_CB(SINGLE_CLICK);
+                                      } else if(handle->repeat == 2) {
+                                              handle->event = (Byte)DOUBLE_CLICK;
+                                              EVENT_CB(DOUBLE_CLICK); // repeat hit
+                                      }
+                                      handle->state = 0;
+                              }
+                              break;
+              
+                      case 3:
+                              if(handle->button_level != handle->active_level) { //released press up
+                                      handle->event = (Byte)PRESS_UP;
+                                      EVENT_CB(PRESS_UP);
+                                      if(handle->ticks < SHORT_TICKS) {
+                                              handle->ticks = 0;
+                                              handle->state = 2; //repeat press
+                                      } else {
+                                              handle->state = 0;
+                                      }
+                              }
+                              break;
+              
+                      case 5:
+                              if(handle->button_level == handle->active_level) {
+                                      //continue hold trigger
+                                      handle->event = (Byte)LONG_PRESS_HOLD;
+                                      EVENT_CB(LONG_PRESS_HOLD);
+              
+                              } else { //releasd
+                                      handle->event = (Byte)PRESS_UP;
+                                      EVENT_CB(PRESS_UP);
+                                      handle->state = 0; //reset
+                              }
+                              break;
+                      }
+              }
+              
+              void button_ticks(void)
+              {
+                      Byte i=0;
+                      for(i=0; i<BUTTON_MAX; i++) {
+                              button_handler(&button_handle[i]);
+                      }
+              }
+C51 COMPILER V9.00   MISC                                                                  04/02/2022 17:33:40 PAGE 5   
+
+              
+              Byte key_read(void)
+              {
+                  return KEY;
+              }
+              
+              void key_callback(void *p)
+              {
+                  ROW1=1;
+                  COL3=1;
+              }
+              
+              void app_button_init(void)
+              {
+                  button_init();
+                  button_add(key_read,0,PRESS_UP,key_callback);
+                  SCH_Task_Add(button_ticks,0,5);
+              }
+              
+              #endif
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    204    ----
+   CONSTANT SIZE    =     42    ----
+   XDATA SIZE       =      7    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

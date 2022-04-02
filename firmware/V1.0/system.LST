@@ -1,0 +1,214 @@
+C51 COMPILER V9.00   SYSTEM                                                                04/02/2022 17:33:40 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE SYSTEM
+OBJECT MODULE PLACED IN system.OBJ
+COMPILER INVOKED BY: D:\Keil\C51\BIN\C51.EXE system.c LARGE BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include "system.h"
+   2          
+   3          Task_t  xdata SCH_Task_G[SCH_TASK_MAX];
+   4          
+   5          #define SERIAL_ENABLE
+   6          
+   7          #ifdef SERIAL_ENABLE
+   8          
+   9          char putchar (char c) {
+  10   1          
+  11   1          SBUF=c;
+  12   1          while(!TI);
+  13   1          TI=0;
+  14   1          return c;
+  15   1      }
+  16          
+  17          void SerialInit(void)
+  18          {
+  19   1          SCON = 0x50;        
+  20   1                              
+  21   1          AUXR |= 0x05;       //AUXR^0 串口波特率发生器选择位
+  22   1                              //AUXR^2 串口波特率发生器BRT 1T模式
+  23   1                              
+  24   1          BRT=256-(FOSC/1/32/BAUD);
+  25   1          AUXR |= 0x10;       //AUXR^4 串口独立波特率发生器运行位
+  26   1          
+  27   1          //用于调试的时候只发送数据，可以不开中断
+  28   1          //ES = 1;                 //Enable UART interrupt
+  29   1          //EA = 1;                 //Open master interrupt switch
+  30   1      }
+  31          
+  32          void Uart_Isr() interrupt 4
+  33          {
+  34   1          if (RI)
+  35   1          {
+  36   2              RI = 0;             //Clear receive interrupt flag
+  37   2              //TO DO
+  38   2          }
+  39   1          if (TI)
+  40   1          {
+  41   2              TI = 0;             //Clear transmit interrupt flag
+  42   2              //busy = 0;           //Clear transmit busy flag
+  43   2          }
+  44   1      }
+  45          
+  46          #endif
+  47          
+  48          
+  49          void timer0_Init(void)
+  50          {
+  51   1      #ifdef MODE1T
+  52   1          AUXR |= 0x80;                    //timer0 work in 1T mode
+  53   1      #endif
+  54   1          TMOD |= 0x01;                    //set timer0 as mode1 (16-bit)
+  55   1          TL0 = T10MS;                     //initial timer0 low byte
+C51 COMPILER V9.00   SYSTEM                                                                04/02/2022 17:33:40 PAGE 2   
+
+  56   1          TH0 = T10MS >> 8;                //initial timer0 high byte
+  57   1          TR0 = 1;                        //timer0 start running
+  58   1          ET0 = 1;                        //enable timer0 interrupt
+  59   1          //EA = 1;                         //open global interrupt switch
+  60   1          
+  61   1      }
+  62          
+  63          Byte SCH_Task_Delete(Byte Task_Cur)
+  64          {
+  65   1          Byte xdata ErrorCode;
+  66   1          ErrorCode=ERROR_SCH_OK;
+  67   1          
+  68   1          if(SCH_Task_G[Task_Cur].pfun == 0)
+  69   1          {
+  70   2              ErrorCode=ERROR_SCH_CANNOT_DELETE_TASK;
+  71   2          }
+  72   1         
+  73   1          SCH_Task_G[Task_Cur].pfun=0x0000;
+  74   1          SCH_Task_G[Task_Cur].Delay=0;
+  75   1          SCH_Task_G[Task_Cur].Period=0;
+  76   1          SCH_Task_G[Task_Cur].Runme=0;
+  77   1          
+  78   1          return ErrorCode;
+  79   1      }
+  80          
+  81          void SCH_Task_Init(void)
+  82          {
+  83   1          Byte xdata i;
+  84   1      
+  85   1          for (i = 0; i < SCH_TASK_MAX; i++) 
+  86   1          {
+  87   2              SCH_Task_Delete(i);
+  88   2          }
+  89   1      
+  90   1      #ifdef SERIAL_ENABLE    
+  91   1          SerialInit();
+  92   1      #endif    
+  93   1          timer0_Init();
+  94   1      }
+  95          
+  96          void SCH_Task_Start(void)
+  97          {
+  98   1          EA=1;
+  99   1      }
+ 100          
+ 101          Byte SCH_Task_Add(void (code *pfun)(void),
+ 102                                  Word Delay,
+ 103                                  Word Period)
+ 104          {
+ 105   1          Byte xdata Index,ErrorCode;
+ 106   1          ErrorCode=ERROR_SCH_OK;
+ 107   1          
+ 108   1          for(Index=0;Index<SCH_TASK_MAX;Index++)
+ 109   1          {
+ 110   2              if(SCH_Task_G[Index].pfun == 0)
+ 111   2              {
+ 112   3                  SCH_Task_G[Index].pfun=pfun;
+ 113   3                  SCH_Task_G[Index].Delay=Delay;
+ 114   3                  SCH_Task_G[Index].Period=Period;
+ 115   3                  SCH_Task_G[Index].Runme=0;
+ 116   3                  break;
+ 117   3              }
+C51 COMPILER V9.00   SYSTEM                                                                04/02/2022 17:33:40 PAGE 3   
+
+ 118   2          }
+ 119   1          
+ 120   1          if(Index == SCH_TASK_MAX)
+ 121   1          {
+ 122   2              ErrorCode=ERROR_SCH_TOO_MANY_TASKS;
+ 123   2          }
+ 124   1          
+ 125   1          return ErrorCode;
+ 126   1      }
+ 127          
+ 128          void SCH_Task_Dispatch(void)
+ 129          {
+ 130   1          Byte xdata Index,ErrorCode;
+ 131   1          ErrorCode=ERROR_SCH_OK;
+ 132   1          
+ 133   1          for(Index=0;Index<SCH_TASK_MAX;Index++)
+ 134   1          {
+ 135   2              if(SCH_Task_G[Index].Runme >0)
+ 136   2              {
+ 137   3                  SCH_Task_G[Index].pfun();
+ 138   3                  SCH_Task_G[Index].Runme-=1; 
+ 139   3                  if(SCH_Task_G[Index].Period == 0)
+ 140   3                  {
+ 141   4                      SCH_Task_Delete(Index);
+ 142   4                  }
+ 143   3                  
+ 144   3              }
+ 145   2              
+ 146   2          }
+ 147   1          //Todo others
+ 148   1             
+ 149   1      }
+ 150          
+ 151          void tm0_isr() interrupt 1
+ 152          {
+ 153   1          Byte xdata Index;
+ 154   1          
+ 155   1          TR0=0;
+ 156   1          
+ 157   1          TL0 = T10MS;                     //reload timer0 low byte
+ 158   1          TH0 = T10MS >> 8;                //reload timer0 high byte
+ 159   1          
+ 160   1          TR0=1;
+ 161   1          
+ 162   1          for(Index=0;Index<SCH_TASK_MAX;Index++)
+ 163   1          {
+ 164   2              if(SCH_Task_G[Index].pfun)
+ 165   2              {
+ 166   3                  
+ 167   3                  if(SCH_Task_G[Index].Delay == 0)
+ 168   3                  {
+ 169   4                      SCH_Task_G[Index].Runme+=1;
+ 170   4                      if(SCH_Task_G[Index].Period)
+ 171   4                      {
+ 172   5                          SCH_Task_G[Index].Delay=SCH_Task_G[Index].Period;
+ 173   5                      }
+ 174   4                  }
+ 175   3                  else
+ 176   3                  {
+ 177   4                      SCH_Task_G[Index].Delay-=1;
+ 178   4                  }
+ 179   3                  
+C51 COMPILER V9.00   SYSTEM                                                                04/02/2022 17:33:40 PAGE 4   
+
+ 180   3              }
+ 181   2              
+ 182   2          }
+ 183   1          
+ 184   1      }
+ 185          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    663    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     24       8
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
