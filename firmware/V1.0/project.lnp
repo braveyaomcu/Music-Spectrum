@@ -1,0 +1,10 @@
+"STARTUP.obj",
+"main.obj",
+"display.obj",
+"misc.obj",
+"system.obj",
+"fft.obj" 
+TO "project" 
+RAMSIZE(256) 
+CODE( 0X0000-0XEFFF )
+XDATA( 0X0000-0X03FF )
